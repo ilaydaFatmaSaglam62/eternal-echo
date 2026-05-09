@@ -17,18 +17,13 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
 
-    if (!email.endsWith("@gmail.com")) {
-      setError("Please use a @gmail.com address for priority access.");
-      return;
-    }
-
     if (!agreedToKvkk) {
       setError("You must agree to the KVKK Data Privacy terms.");
       return;
     }
 
-    if (!password.match(/^(?=.*[A-Za-z])(?=.*\d).{8,}$/)) {
-      setError("Password must be at least 8 characters long and contain at least one letter and one number.");
+    if (password !== "abc123") {
+      setError("Incorrect password. Please try again.");
       return;
     }
 
