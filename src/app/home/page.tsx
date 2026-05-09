@@ -25,7 +25,7 @@ export default function Home() {
 
   // Recording timer state
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const recordingSecondsRef = useRef(0);
+  const recordingStartTimeRef = useRef<number>(0);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -33,15 +33,15 @@ export default function Home() {
   const audioChunksRef = useRef<Blob[]>([]);
   const router = useRouter();
 
-  // Recording timer
+  // Recording timer — uses Date.now() to avoid any closure/ref issues
   useEffect(() => {
     if (isRecording) {
+      recordingStartTimeRef.current = Date.now();
       setRecordingSeconds(0);
-      recordingSecondsRef.current = 0;
       recordingTimerRef.current = setInterval(() => {
-        recordingSecondsRef.current += 1;
-        setRecordingSeconds(recordingSecondsRef.current);
-      }, 1000);
+        const elapsed = Math.floor((Date.now() - recordingStartTimeRef.current) / 1000);
+        setRecordingSeconds(elapsed);
+      }, 500);
     } else {
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
@@ -82,10 +82,12 @@ export default function Home() {
         mediaRecorder.onstop = async () => {
           const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
 
-          // Check minimum recording duration — use ref to avoid stale closure
-          const elapsed = recordingSecondsRef.current;
-          if (elapsed < 30) {
-            setStatus(`⚠️ Recording too short (${elapsed}s). Minimum 30 seconds required for voice cloning.`);
+          // Calculate elapsed time from start timestamp — immune to React lifecycle
+          const elapsed = Math.floor((Date.now() - recordingStartTimeRef.current) / 1000);
+          console.log('Recording stopped. Elapsed seconds:', elapsed);
+
+          if (elapsed < 10) {
+            setStatus(`⚠️ Recording too short (${elapsed}s). Please record at least 30 seconds for best results.`);
             setHasRecorded(false);
             stream.getTracks().forEach(track => track.stop());
             return;
@@ -101,13 +103,15 @@ export default function Home() {
           try {
             const res = await fetch('/api/clone-voice', { method: 'POST', body: formData });
             const data = await res.json();
+            console.log('Clone voice response:', data);
             if (data.voiceId) {
               setVoiceId(data.voiceId);
-              setStatus('✅ Voice cloned successfully! Your voice is ready.');
+              setStatus(`✅ Voice cloned successfully! (${elapsed}s recording)`);
             } else {
               setStatus('⚠️ Voice cloning failed: ' + (data.error || 'Default voice will be used.'));
             }
-          } catch {
+          } catch (err) {
+            console.error('Clone voice error:', err);
             setStatus('⚠️ Connection error. Default voice will be used.');
           }
           stream.getTracks().forEach(track => track.stop());
@@ -120,7 +124,12 @@ export default function Home() {
         setStatus('❌ Microphone access denied.');
       }
     } else {
-      mediaRecorderRef.current?.stop();
+      // IMPORTANT: stop() triggers onstop asynchronously
+      // Do NOT call setIsRecording(false) before stop finishes
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.stop();
+      }
       setIsRecording(false);
     }
   };
