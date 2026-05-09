@@ -22,6 +22,7 @@ export default function Home() {
   const [voiceId, setVoiceId] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState("");
   const [finalAudioUrl, setFinalAudioUrl] = useState("");
+  const [mintSuccess, setMintSuccess] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -54,7 +55,7 @@ export default function Home() {
           setStatus('Ses kaydedildi! Klonlanıyor...');
 
           const formData = new FormData();
-          formData.append('audio', blob, 'voice.mp3');
+          formData.append('audio', blob, 'voice.webm');
           formData.append('name', 'My Eternal Voice');
 
           try {
@@ -92,6 +93,8 @@ export default function Home() {
     }
 
     setIsMinting(true);
+    setMintSuccess(false);
+    setFinalAudioUrl("");
     setStatus('Seslendirilıyor...');
 
     try {
@@ -169,9 +172,11 @@ export default function Home() {
       const mintData = await mintRes.json();
 
       if (mintData.success) {
-        setStatus('✅ NFT başarıyla basıldı! Sesin aşağıda:');
-        setFinalAudioUrl(audioData.ipfsUrl);
-        setTimeout(() => router.push("/archive"), 15000);
+        setStatus('✅ Anın sonsuza mühürlendi.');
+        if (!unlockDate || new Date(unlockDate) <= new Date()) {
+          setFinalAudioUrl(audioData.ipfsUrl);
+        }
+        setMintSuccess(true);
       } else {
         setStatus('NFT hatası: ' + mintData.error);
       }
@@ -394,10 +399,24 @@ export default function Home() {
 
           {status && <p className="text-sm text-center text-[var(--text-muted)]">{status}</p>}
 
-          {finalAudioUrl && (
-            <div className="w-full flex flex-col gap-2">
-              <p className="text-xs text-center text-[var(--text-muted)]">🔊 Sesli anın:</p>
-              <audio controls autoPlay src={finalAudioUrl} className="w-full" />
+          {mintSuccess && (
+            <div className="flex flex-col items-center gap-4 mt-2">
+              {finalAudioUrl ? (
+                <div className="w-full flex flex-col gap-2">
+                  <p className="text-xs text-center text-[var(--text-muted)]">🔊 Sesli anın hazır</p>
+                  <audio controls src={finalAudioUrl} className="w-full" />
+                </div>
+              ) : unlockDate && new Date(unlockDate) > new Date() ? (
+                <p className="text-xs text-center text-[#D4AF37]">
+                  🔒 Bu anı {new Date(unlockDate).toLocaleDateString('tr-TR')} tarihine kadar kilitli.
+                </p>
+              ) : null}
+              <button
+                onClick={() => router.push("/archive")}
+                className="px-8 py-3 rounded-full border border-[var(--border-color)] text-sm font-medium text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors"
+              >
+                ✨ Witness the magic → Go to Archive
+              </button>
             </div>
           )}
         </motion.div>
