@@ -14,15 +14,14 @@ export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("Personal");
   const [newFolderName, setNewFolderName] = useState("");
   const [isRecording, setIsRecording] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const [hasRecorded, setHasRecorded] = useState(false);
   const [isEternalVoiceActive, setIsEternalVoiceActive] = useState(false);
   const [isMinting, setIsMinting] = useState(false);
   const [unlockDate, setUnlockDate] = useState("");
   const [status, setStatus] = useState("");
   const [voiceId, setVoiceId] = useState<string | null>(null);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [walletAddress, setWalletAddress] = useState("");
+  const [finalAudioUrl, setFinalAudioUrl] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -51,31 +50,25 @@ export default function Home() {
 
         mediaRecorder.onstop = async () => {
           const blob = new Blob(audioChunksRef.current, { type: 'audio/mp3' });
-          setAudioBlob(blob);
           setHasRecorded(true);
           setStatus('Ses kaydedildi! Klonlanıyor...');
 
-          // ElevenLabs'a klonla
           const formData = new FormData();
           formData.append('audio', blob, 'voice.mp3');
           formData.append('name', 'My Eternal Voice');
 
           try {
-            const res = await fetch('/api/clone-voice', {
-              method: 'POST',
-              body: formData,
-            });
+            const res = await fetch('/api/clone-voice', { method: 'POST', body: formData });
             const data = await res.json();
             if (data.voiceId) {
               setVoiceId(data.voiceId);
               setStatus('✅ Sesin klonlandı!');
             } else {
-              setStatus('Ses klonlanamadı, varsayılan ses kullanılacak.');
+              setStatus('Varsayılan ses kullanılacak.');
             }
           } catch {
-            setStatus('Ses klonlama hatası, varsayılan ses kullanılacak.');
+            setStatus('Varsayılan ses kullanılacak.');
           }
-
           stream.getTracks().forEach(track => track.stop());
         };
 
@@ -102,7 +95,6 @@ export default function Home() {
     setStatus('Seslendirilıyor...');
 
     try {
-      // 1. Duygu analizi + TTS
       const sentimentRes = await fetch('/api/sentiment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -121,31 +113,22 @@ export default function Home() {
         }),
       });
       const ttsData = await ttsRes.json();
-
       if (!ttsData.audio) throw new Error('TTS failed');
 
       const binaryStr = atob(ttsData.audio);
       const bytes = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) {
-        bytes[i] = binaryStr.charCodeAt(i);
-      }
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
       const audioBlob = new Blob([bytes], { type: 'audio/mp3' });
 
-      setStatus('IPFS\'e yükleniyor...');
+      setStatus("IPFS'e yükleniyor...");
 
-      // 2. Sesi IPFS'e yükle
       const audioFormData = new FormData();
       audioFormData.append('file', audioBlob, 'memory.mp3');
       audioFormData.append('name', 'EternalEcho-Audio');
-
-      const audioRes = await fetch('/api/upload-ipfs', {
-        method: 'POST',
-        body: audioFormData,
-      });
+      const audioRes = await fetch('/api/upload-ipfs', { method: 'POST', body: audioFormData });
       const audioData = await audioRes.json();
       if (!audioData.ipfsUrl) throw new Error('IPFS failed');
 
-      // 3. Fotoğrafı IPFS'e yükle
       let imageIpfsUrl = 'https://placehold.co/500x500/purple/white?text=EternalEcho';
       if (photoFile) {
         const imageFormData = new FormData();
@@ -157,8 +140,6 @@ export default function Home() {
       }
 
       setStatus('Anı kaydediliyor...');
-
-      // 4. Anıyı kaydet
       await fetch('/api/save-memory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -174,8 +155,6 @@ export default function Home() {
       });
 
       setStatus('NFT basılıyor...');
-
-      // 5. NFT bas
       const mintRes = await fetch('/api/mint-nft', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -190,8 +169,9 @@ export default function Home() {
       const mintData = await mintRes.json();
 
       if (mintData.success) {
-        setStatus('✅ NFT başarıyla basıldı!');
-        setTimeout(() => router.push("/archive"), 2000);
+        setStatus('✅ NFT başarıyla basıldı! Sesin aşağıda:');
+        setFinalAudioUrl(audioData.ipfsUrl);
+        setTimeout(() => router.push("/archive"), 8000);
       } else {
         setStatus('NFT hatası: ' + mintData.error);
       }
@@ -226,11 +206,11 @@ export default function Home() {
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1.1, opacity: 1 }} exit={{ scale: 1.5, opacity: 0 }}
               transition={{ duration: 3, ease: "easeInOut" }}
-              className="absolute w-[800px] h-[800px] bg-gradient-radial from-[#D4AF37]/30 to-transparent rounded-full blur-3xl"
+              className="absolute w-[800px] h-[800px] rounded-full blur-3xl"
             />
             <motion.div
               initial={{ y: 50, opacity: 0 }} animate={{ y: -50, opacity: 1 }} transition={{ duration: 2, ease: "easeOut" }}
-              className="flex items-center gap-4 text-[#D4AF37] font-playfair text-3xl italic drop-shadow-sm"
+              className="flex items-center gap-4 text-[#D4AF37] text-3xl italic"
             >
               <Sparkles className="w-8 h-8" />
               <span>Sealing into Eternity...</span>
@@ -241,26 +221,26 @@ export default function Home() {
 
       <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-[260px_1fr] gap-x-12 gap-y-10 lg:gap-x-16 relative z-10 mt-4 lg:mt-8">
         <motion.aside
-          initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
+          initial={{ opacity: 0, x: -50 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 1 }}
           className="w-full flex flex-col justify-between h-full"
         >
           <div
-            className="bg-[var(--accent)] p-3 pb-10 rounded-sm shadow-layered border-subtle w-full max-w-[240px] mx-auto transform -rotate-2 transition-transform hover:rotate-0 duration-500 ease-out z-20"
+            className="bg-[var(--accent)] p-3 pb-10 rounded-sm shadow-layered border-subtle w-full max-w-[240px] mx-auto transform -rotate-2 transition-transform hover:rotate-0 duration-500 ease-out"
             onClick={() => fileInputRef.current?.click()}
           >
             <div className="bg-white/50 w-full aspect-square mb-3 flex items-center justify-center overflow-hidden cursor-pointer border-subtle relative group">
               {photoUrl ? (
-                <img src={photoUrl} alt="Polaroid Memory" className="w-full h-full object-cover" />
+                <img src={photoUrl} alt="Memory" className="w-full h-full object-cover" />
               ) : (
-                <div className="text-[var(--text-muted)] flex flex-col items-center gap-2 group-hover:scale-105 transition-transform duration-300">
+                <div className="text-[var(--text-muted)] flex flex-col items-center gap-2">
                   <Upload strokeWidth={1} className="w-6 h-6" />
-                  <span className="text-xs font-light tracking-wide">Upload Photo</span>
+                  <span className="text-xs">Upload Photo</span>
                 </div>
               )}
             </div>
             <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handlePhotoUpload} />
-            <div className="text-center w-full">
-              <span className="font-caveat text-2xl text-[var(--foreground)] tracking-wide opacity-80">{currentDate}</span>
+            <div className="text-center">
+              <span className="font-caveat text-2xl text-[var(--foreground)] opacity-80">{currentDate}</span>
             </div>
           </div>
 
@@ -268,24 +248,22 @@ export default function Home() {
             <div className="flex items-center gap-2 px-3 py-1.5 self-center">
               <CheckCircle2 className="w-3.5 h-3.5 text-[#D4AF37]" strokeWidth={2} />
               <span className="text-[9px] uppercase tracking-widest font-medium text-[var(--text-muted)]">
-                Voice Profile: {voiceId ? 'Cloned ✓' : 'Initialized'}
+                Voice: {voiceId ? 'Cloned ✓' : 'Initialized'}
               </span>
             </div>
 
             <div className="bg-[var(--accent)] rounded-full shadow-layered border-subtle p-2 pr-4 flex items-center gap-3 w-full">
-              <div className="relative flex items-center justify-center w-10 h-10 flex-shrink-0 bg-white rounded-full border border-[var(--border-color)]">
-                <Disc3 className={`w-5 h-5 text-[var(--foreground)] ${isRecording ? "animate-spin text-[#D4AF37]" : ""}`} strokeWidth={1} />
+              <div className="flex items-center justify-center w-10 h-10 flex-shrink-0 bg-white rounded-full border border-[var(--border-color)]">
+                <Disc3 className={`w-5 h-5 ${isRecording ? "animate-spin text-[#D4AF37]" : "text-[var(--foreground)]"}`} strokeWidth={1} />
               </div>
-              <div className="flex-1 flex flex-col justify-center">
+              <div className="flex-1">
                 {isRecording ? (
                   <div className="flex flex-col gap-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-medium text-[#D4AF37] uppercase tracking-wider">Recording...</span>
-                    </div>
-                    <button onClick={handleRecordingToggle} className="text-xs bg-red-500/10 text-red-500 px-2 py-1 rounded shadow-sm">Stop</button>
+                    <span className="text-[10px] font-medium text-[#D4AF37] uppercase">Recording...</span>
+                    <button onClick={handleRecordingToggle} className="text-xs bg-red-500/10 text-red-500 px-2 py-1 rounded">Stop</button>
                   </div>
                 ) : (
-                  <button onClick={handleRecordingToggle} className="flex items-center gap-2 text-xs font-medium tracking-wide text-[var(--foreground)] hover:text-[#D4AF37] transition-colors text-left">
+                  <button onClick={handleRecordingToggle} className="flex items-center gap-2 text-xs font-medium text-[var(--foreground)] hover:text-[#D4AF37] transition-colors">
                     <Mic className="w-3.5 h-3.5" />
                     {hasRecorded ? "Retake Imprint" : "Record Voice"}
                   </button>
@@ -310,7 +288,6 @@ export default function Home() {
               )}
             </AnimatePresence>
 
-            {/* Cüzdan Adresi */}
             <input
               type="text"
               placeholder="Solana cüzdan adresi..."
@@ -323,21 +300,21 @@ export default function Home() {
 
         <motion.div
           initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1, delay: 0.2 }}
-          className={`bg-[var(--editor-bg)] paper-texture rounded-2xl p-8 sm:p-12 shadow-layered border-subtle relative transition-all duration-1000 flex flex-col h-full min-h-[500px] ${isMinting ? "border-[#D4AF37] shadow-[0_0_50px_rgba(212,175,55,0.2)]" : ""}`}
+          className={`bg-[var(--editor-bg)] paper-texture rounded-2xl p-8 sm:p-12 shadow-layered border-subtle relative flex flex-col h-full min-h-[500px] ${isMinting ? "border-[#D4AF37]" : ""}`}
         >
-          <div className="flex justify-between items-start mb-10 relative z-10">
+          <div className="flex justify-between items-start mb-10">
             <div className="flex flex-col gap-1">
               <div className="flex items-center gap-3">
                 <Disc3 className="w-6 h-6 text-[var(--foreground)]" strokeWidth={1} />
-                <span className="font-playfair text-lg font-semibold tracking-wide text-[var(--foreground)] opacity-90">Cuvée</span>
+                <span className="font-playfair text-lg font-semibold text-[var(--foreground)]">Cuvée</span>
               </div>
-              <span className="text-[10px] uppercase tracking-widest text-[#D4AF37] font-medium ml-9">Archive: {selectedCategory}</span>
+              <span className="text-[10px] uppercase tracking-widest text-[#D4AF37] ml-9">Archive: {selectedCategory}</span>
             </div>
-            <span className="font-playfair text-[var(--text-muted)] text-sm italic tracking-wide">{currentDate}, {currentTime}</span>
+            <span className="text-[var(--text-muted)] text-sm italic">{currentDate}, {currentTime}</span>
           </div>
 
           <textarea
-            className="w-full flex-1 bg-transparent outline-none resize-none font-playfair text-xl md:text-2xl leading-relaxed text-[var(--foreground)] placeholder:text-[var(--text-muted)] placeholder:italic placeholder:font-light relative z-10"
+            className="w-full flex-1 bg-transparent outline-none resize-none font-playfair text-xl leading-relaxed text-[var(--foreground)] placeholder:text-[var(--text-muted)] placeholder:italic"
             placeholder="Record your thoughts, unedited and pure..."
             value={journalText}
             onChange={(e) => setJournalText(e.target.value)}
@@ -348,14 +325,14 @@ export default function Home() {
             <AnimatePresence>
               {isArchivePopoverOpen && (
                 <motion.div
-                  initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="mb-4 w-64 bg-white shadow-layered border-subtle rounded-xl p-4 flex flex-col gap-4 origin-bottom-right"
+                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+                  className="mb-4 w-64 bg-white shadow-layered border-subtle rounded-xl p-4 flex flex-col gap-4"
                 >
-                  <span className="font-playfair text-sm font-semibold text-[var(--foreground)]">Save to Archive</span>
-                  <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1">
+                  <span className="font-playfair text-sm font-semibold">Save to Archive</span>
+                  <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto">
                     {archiveFolders.map((folder) => (
                       <button key={folder} onClick={() => { setSelectedCategory(folder); setIsArchivePopoverOpen(false); }}
-                        className="text-left px-3 py-2 text-xs font-medium text-[var(--foreground)] hover:bg-[var(--accent)] rounded-md transition-colors flex items-center justify-between group"
+                        className="text-left px-3 py-2 text-xs font-medium hover:bg-[var(--accent)] rounded-md flex items-center justify-between"
                       >
                         {folder}
                         {selectedCategory === folder && <CheckCircle2 className="w-3.5 h-3.5 text-[#D4AF37]" />}
@@ -363,11 +340,12 @@ export default function Home() {
                     ))}
                   </div>
                   <div className="pt-3 border-t border-[var(--border-color)] flex items-center gap-2">
-                    <input type="text" placeholder="New folder..." value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
-                      className="flex-1 bg-[var(--accent)] border border-[var(--border-color)] rounded-md px-3 py-1.5 text-xs text-[var(--foreground)] outline-none focus:border-[#D4AF37]/50"
+                    <input type="text" placeholder="New folder..." value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      className="flex-1 bg-[var(--accent)] border border-[var(--border-color)] rounded-md px-3 py-1.5 text-xs outline-none"
                       onKeyDown={(e) => e.key === 'Enter' && handleAddFolder()}
                     />
-                    <button onClick={handleAddFolder} className="p-1.5 bg-[var(--foreground)] text-[var(--background)] rounded-md hover:bg-black transition-colors">
+                    <button onClick={handleAddFolder} className="p-1.5 bg-[var(--foreground)] text-[var(--background)] rounded-md">
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
@@ -375,9 +353,9 @@ export default function Home() {
               )}
             </AnimatePresence>
             <button onClick={() => setIsArchivePopoverOpen(!isArchivePopoverOpen)}
-              className="w-12 h-12 bg-white shadow-layered border-subtle rounded-full flex items-center justify-center text-[var(--foreground)] hover:text-[#D4AF37] hover:scale-105 transition-all duration-300"
+              className="w-12 h-12 bg-white shadow-layered border-subtle rounded-full flex items-center justify-center hover:text-[#D4AF37]"
             >
-              <Plus className={`w-5 h-5 transition-transform duration-300 ${isArchivePopoverOpen ? "rotate-45" : ""}`} strokeWidth={1.5} />
+              <Plus className={`w-5 h-5 transition-transform ${isArchivePopoverOpen ? "rotate-45" : ""}`} strokeWidth={1.5} />
             </button>
           </div>
         </motion.div>
@@ -387,7 +365,7 @@ export default function Home() {
           className="lg:col-start-2 flex flex-col gap-6 w-full"
         >
           <div className="w-full px-2">
-            <div className="flex justify-between text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-3 font-medium">
+            <div className="flex justify-between text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-3">
               <span>Genesis</span><span>Time Capsule Timeline</span><span>Eternity</span>
             </div>
             <div className="w-full h-[1px] bg-[var(--border-color)] relative flex items-center">
@@ -403,18 +381,25 @@ export default function Home() {
                 <Calendar className="w-4 h-4 text-[var(--foreground)]" strokeWidth={1.5} />
               </div>
               <input type="date" value={unlockDate} onChange={(e) => setUnlockDate(e.target.value)}
-                className="w-full sm:w-auto pl-12 pr-6 py-3 rounded-full border-subtle shadow-layered bg-[var(--editor-bg)] text-sm font-medium text-[var(--foreground)] outline-none cursor-pointer"
+                className="w-full sm:w-auto pl-12 pr-6 py-3 rounded-full border-subtle shadow-layered bg-[var(--editor-bg)] text-sm outline-none cursor-pointer"
                 style={{ colorScheme: "light" }}
               />
             </div>
             <button onClick={handleMint} disabled={isMinting || (!journalText && !photoUrl)}
-              className="w-full sm:w-auto px-10 py-3 rounded-full bg-[var(--foreground)] text-[var(--background)] hover:bg-black disabled:opacity-50 transition-all duration-300 text-sm font-medium tracking-widest uppercase shadow-layered"
+              className="w-full sm:w-auto px-10 py-3 rounded-full bg-[var(--foreground)] text-[var(--background)] hover:bg-black disabled:opacity-50 transition-all text-sm font-medium tracking-widest uppercase shadow-layered"
             >
               {isMinting ? 'Sealing...' : 'Mint as Eternal NFT'}
             </button>
           </div>
 
           {status && <p className="text-sm text-center text-[var(--text-muted)]">{status}</p>}
+
+          {finalAudioUrl && (
+            <div className="w-full flex flex-col gap-2">
+              <p className="text-xs text-center text-[var(--text-muted)]">🔊 Sesli anın:</p>
+              <audio controls autoPlay src={finalAudioUrl} className="w-full" />
+            </div>
+          )}
         </motion.div>
       </div>
     </main>
