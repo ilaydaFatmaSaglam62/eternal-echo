@@ -19,11 +19,8 @@ const MOCK_MEMORIES = [
 export default function ArchivePage() {
   return (
     <main className="flex-1 flex flex-col p-6 lg:p-12 font-sans bg-[var(--background)] max-w-7xl mx-auto w-full">
-      
-      {/* Header & Categories */}
       <div className="mb-12">
         <h1 className="font-playfair text-4xl text-[var(--foreground)] mb-8">Past Memories</h1>
-        
         <div className="flex flex-wrap gap-4">
           {CATEGORIES.map((cat) => {
             const Icon = cat.icon;
@@ -37,34 +34,19 @@ export default function ArchivePage() {
         </div>
       </div>
 
-      {/* Grid View */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {MOCK_MEMORIES.map((memory) => (
           <div key={memory.id} className="bg-white p-8 rounded-2xl border-subtle shadow-layered hover:shadow-[0_20px_60px_rgba(44,42,40,0.05)] transition-all duration-500 cursor-pointer flex flex-col h-64 group relative overflow-hidden">
-            
             <div className="flex justify-between items-start mb-6">
-              <span className="font-inter uppercase tracking-widest text-[10px] font-medium text-[var(--text-muted)]">
-                {memory.category}
-              </span>
-              <span className="font-playfair italic text-xs text-[var(--text-muted)]">
-                {memory.date}
-              </span>
+              <span className="font-inter uppercase tracking-widest text-[10px] font-medium text-[var(--text-muted)]">{memory.category}</span>
+              <span className="font-playfair italic text-xs text-[var(--text-muted)]">{memory.date}</span>
             </div>
-
-            <h3 className="font-playfair text-xl text-[var(--foreground)] mb-4 leading-tight group-hover:text-[#D4AF37] transition-colors">
-              {memory.title}
-            </h3>
-            
-            <p className="font-inter text-sm text-[var(--text-muted)] leading-relaxed line-clamp-3 font-light">
-              {memory.excerpt}
-            </p>
-
-            {/* Subtle Hover Overlay */}
+            <h3 className="font-playfair text-xl text-[var(--foreground)] mb-4 leading-tight group-hover:text-[#D4AF37] transition-colors">{memory.title}</h3>
+            <p className="font-inter text-sm text-[var(--text-muted)] leading-relaxed line-clamp-3 font-light">{memory.excerpt}</p>
             <div className="absolute inset-0 border-[0.5px] border-transparent group-hover:border-[#D4AF37]/20 rounded-2xl pointer-events-none transition-colors duration-500" />
           </div>
         ))}
       </div>
-
     </main>
   );
 }

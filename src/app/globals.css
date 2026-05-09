@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 :root {
-  --background: #FDFBF7; /* Soft bone-whites */
-  --foreground: #2C2C2C; /* Deep elegant charcoal */
-  --accent: #F5F2EB; /* Creamy beiges for sidebars/menus */
-  --editor-bg: #FFFFFF; /* Pure white for the editor */
-  --border-color: #E8E5DF; /* Extremely subtle beige/gray */
-  --text-muted: #8C857B; /* Subtle light serif text */
-  --highlight-rose: #F4EAE6; /* Soft pale rose for active tabs */
-  --highlight-gold: #F4ECE1; /* Soft gold for active tabs */
+  --background: #FDFBF7;
+  --foreground: #2C2C2C;
+  --accent: #F5F2EB;
+  --editor-bg: #FFFFFF;
+  --border-color: #E8E5DF;
+  --text-muted: #8C857B;
+  --highlight-rose: #F4EAE6;
+  --highlight-gold: #F4ECE1;
 }
 
 body {
@@ -18,13 +18,12 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom Utilities */
 @utility border-subtle {
   border: 0.5px solid var(--border-color);
 }
 
 @utility shadow-layered {
-  box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -2px rgba(0,0,0,0.02);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.02);
 }
 
 @utility paper-texture {
