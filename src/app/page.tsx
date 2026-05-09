@@ -49,7 +49,7 @@ export default function Home() {
         };
 
         mediaRecorder.onstop = async () => {
-          const blob = new Blob(audioChunksRef.current, { type: 'audio/mp3' });
+          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           setHasRecorded(true);
           setStatus('Ses kaydedildi! Klonlanıyor...');
 
@@ -171,7 +171,7 @@ export default function Home() {
       if (mintData.success) {
         setStatus('✅ NFT başarıyla basıldı! Sesin aşağıda:');
         setFinalAudioUrl(audioData.ipfsUrl);
-        setTimeout(() => router.push("/archive"), 8000);
+        setTimeout(() => router.push("/archive"), 15000);
       } else {
         setStatus('NFT hatası: ' + mintData.error);
       }

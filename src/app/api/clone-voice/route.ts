@@ -10,9 +10,15 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'No audio file provided' }, { status: 400 });
         }
 
+        console.log('Audio file type:', audioFile.type);
+        console.log('Audio file size:', audioFile.size);
+
         const elevenLabsFormData = new FormData();
-        elevenLabsFormData.append('name', voiceName || 'My Cloned Voice');
-        elevenLabsFormData.append('files', audioFile);
+        elevenLabsFormData.append('name', voiceName || 'My Eternal Voice');
+
+        // Dosyayı doğru formatla gönder
+        const blob = new Blob([await audioFile.arrayBuffer()], { type: 'audio/mpeg' });
+        elevenLabsFormData.append('files', blob, 'voice.mp3');
         elevenLabsFormData.append('description', 'EternalEcho cloned voice');
 
         const response = await fetch('https://api.elevenlabs.io/v1/voices/add', {
@@ -24,6 +30,7 @@ export async function POST(request: NextRequest) {
         });
 
         const result = await response.json();
+        console.log('ElevenLabs response:', JSON.stringify(result));
 
         if (!response.ok) {
             return NextResponse.json({ error: result }, { status: 500 });
@@ -32,10 +39,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             voiceId: result.voice_id,
-            voiceName: voiceName || 'My Cloned Voice',
         });
     } catch (error) {
         console.error('Clone voice error:', error);
-        return NextResponse.json({ error: 'Voice cloning failed' }, { status: 500 });
+        return NextResponse.json({ error: String(error) }, { status: 500 });
     }
 }
