@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calendar, Upload, Disc3, Mic, Sparkles, CheckCircle2, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -21,13 +21,40 @@ export default function Home() {
   const [status, setStatus] = useState("");
   const [voiceId, setVoiceId] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState("");
-  const [finalAudioUrl, setFinalAudioUrl] = useState("");
   const [mintSuccess, setMintSuccess] = useState(false);
+
+  // Recording timer state
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const router = useRouter();
+
+  // Recording timer
+  useEffect(() => {
+    if (isRecording) {
+      setRecordingSeconds(0);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
+    };
+  }, [isRecording]);
+
+  const formatTime = useCallback((seconds: number) => {
+    const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+    const s = (seconds % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  }, []);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -51,8 +78,17 @@ export default function Home() {
 
         mediaRecorder.onstop = async () => {
           const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+
+          // Check minimum recording duration
+          if (recordingSeconds < 30) {
+            setStatus(`⚠️ Recording too short (${recordingSeconds}s). Minimum 30 seconds required for voice cloning.`);
+            setHasRecorded(false);
+            stream.getTracks().forEach(track => track.stop());
+            return;
+          }
+
           setHasRecorded(true);
-          setStatus('Ses kaydedildi! Klonlanıyor...');
+          setStatus('Voice recorded! Cloning your voice...');
 
           const formData = new FormData();
           formData.append('audio', blob, 'voice.webm');
@@ -63,21 +99,21 @@ export default function Home() {
             const data = await res.json();
             if (data.voiceId) {
               setVoiceId(data.voiceId);
-              setStatus('✅ Voice cloned!');
+              setStatus('✅ Voice cloned successfully! Your voice is ready.');
             } else {
-              setStatus('Default voice will be used.');
+              setStatus('⚠️ Voice cloning failed: ' + (data.error || 'Default voice will be used.'));
             }
           } catch {
-            setStatus('Default voice will be used.');
+            setStatus('⚠️ Connection error. Default voice will be used.');
           }
           stream.getTracks().forEach(track => track.stop());
         };
 
         mediaRecorder.start();
         setIsRecording(true);
-        setStatus('Recording...');
+        setStatus('🎙️ Recording... Speak for at least 30 seconds.');
       } catch {
-        setStatus('Microphone access denied.');
+        setStatus('❌ Microphone access denied.');
       }
     } else {
       mediaRecorderRef.current?.stop();
@@ -94,7 +130,6 @@ export default function Home() {
 
     setIsMinting(true);
     setMintSuccess(false);
-    setFinalAudioUrl("");
     setStatus('Analyzing emotion...');
 
     try {
@@ -172,9 +207,6 @@ export default function Home() {
 
       if (mintData.success) {
         setStatus('✅ Your memory is sealed into eternity.');
-        if (!unlockDate || new Date(unlockDate) <= new Date()) {
-          setFinalAudioUrl(audioData.ipfsUrl);
-        }
         setMintSuccess(true);
       } else {
         setStatus('NFT error: ' + mintData.error);
@@ -262,8 +294,26 @@ export default function Home() {
               </div>
               <div className="flex-1">
                 {isRecording ? (
-                  <div className="flex flex-col gap-2">
-                    <span className="text-[10px] font-medium text-[#D4AF37] uppercase">Recording...</span>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-medium text-[#D4AF37] uppercase">Recording...</span>
+                      <span className={`text-[11px] font-mono font-bold ${recordingSeconds >= 30 ? 'text-green-600' : 'text-[#D4AF37]'}`}>
+                        {formatTime(recordingSeconds)}
+                      </span>
+                    </div>
+                    {recordingSeconds < 30 && (
+                      <div className="w-full bg-[var(--border-color)] rounded-full h-1 overflow-hidden">
+                        <motion.div
+                          className="h-full bg-[#D4AF37] rounded-full"
+                          initial={{ width: "0%" }}
+                          animate={{ width: `${Math.min((recordingSeconds / 30) * 100, 100)}%` }}
+                          transition={{ duration: 0.3 }}
+                        />
+                      </div>
+                    )}
+                    {recordingSeconds >= 30 && (
+                      <span className="text-[9px] text-green-600 font-medium">✓ Minimum reached</span>
+                    )}
                     <button onClick={handleRecordingToggle} className="text-xs bg-red-500/10 text-red-500 px-2 py-1 rounded">Stop</button>
                   </div>
                 ) : (
@@ -398,26 +448,36 @@ export default function Home() {
 
           {status && <p className="text-sm text-center text-[var(--text-muted)]">{status}</p>}
 
-          {mintSuccess && (
-            <div className="flex flex-col items-center gap-4 mt-2">
-              {finalAudioUrl ? (
-                <div className="w-full flex flex-col gap-2">
-                  <p className="text-xs text-center text-[var(--text-muted)]">🔊 Your voice memory is ready</p>
-                  <audio controls src={finalAudioUrl} className="w-full" />
-                </div>
-              ) : unlockDate && new Date(unlockDate) > new Date() ? (
-                <p className="text-xs text-center text-[#D4AF37]">
-                  🔒 This memory is locked until {new Date(unlockDate).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}.
-                </p>
-              ) : null}
-              <button
-                onClick={() => router.push("/archive")}
-                className="px-8 py-3 rounded-full border border-[var(--border-color)] text-sm font-medium text-[var(--foreground)] hover:bg-[var(--accent)] transition-colors"
+          {/* Mint Success: Only show "Witness the magic" button — no audio player */}
+          <AnimatePresence>
+            {mintSuccess && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                className="flex flex-col items-center gap-4 mt-2"
               >
-                ✨ Witness the magic → Go to Archive
-              </button>
-            </div>
-          )}
+                {unlockDate && new Date(unlockDate) > new Date() && (
+                  <p className="text-xs text-center text-[#D4AF37]">
+                    🔒 This memory is locked until {new Date(unlockDate).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}.
+                  </p>
+                )}
+                <motion.button
+                  onClick={() => router.push("/archive")}
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
+                  className="px-10 py-4 rounded-full bg-gradient-to-r from-[#D4AF37] to-[#C5A028] text-white text-sm font-semibold tracking-widest uppercase shadow-lg hover:shadow-xl transition-all duration-300"
+                >
+                  <span className="flex items-center gap-3">
+                    <Sparkles className="w-4 h-4" />
+                    Witness the Magic
+                    <span className="text-white/80">→</span>
+                  </span>
+                </motion.button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </div>
     </main>
