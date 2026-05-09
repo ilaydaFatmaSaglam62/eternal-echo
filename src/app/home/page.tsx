@@ -25,6 +25,7 @@ export default function Home() {
 
   // Recording timer state
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const recordingSecondsRef = useRef(0);
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -36,8 +37,10 @@ export default function Home() {
   useEffect(() => {
     if (isRecording) {
       setRecordingSeconds(0);
+      recordingSecondsRef.current = 0;
       recordingTimerRef.current = setInterval(() => {
-        setRecordingSeconds((prev) => prev + 1);
+        recordingSecondsRef.current += 1;
+        setRecordingSeconds(recordingSecondsRef.current);
       }, 1000);
     } else {
       if (recordingTimerRef.current) {
@@ -79,9 +82,10 @@ export default function Home() {
         mediaRecorder.onstop = async () => {
           const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
 
-          // Check minimum recording duration
-          if (recordingSeconds < 30) {
-            setStatus(`⚠️ Recording too short (${recordingSeconds}s). Minimum 30 seconds required for voice cloning.`);
+          // Check minimum recording duration — use ref to avoid stale closure
+          const elapsed = recordingSecondsRef.current;
+          if (elapsed < 30) {
+            setStatus(`⚠️ Recording too short (${elapsed}s). Minimum 30 seconds required for voice cloning.`);
             setHasRecorded(false);
             stream.getTracks().forEach(track => track.stop());
             return;
