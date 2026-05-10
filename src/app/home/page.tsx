@@ -67,6 +67,52 @@ export default function Home() {
     }
   };
 
+  // Convert webm blob to WAV using Web Audio API (no external libraries)
+  const convertToWav = async (webmBlob: Blob): Promise<Blob> => {
+    const arrayBuffer = await webmBlob.arrayBuffer();
+    const audioContext = new AudioContext();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+    // Get PCM data (mono, 16-bit)
+    const numChannels = 1;
+    const sampleRate = audioBuffer.sampleRate;
+    const channelData = audioBuffer.getChannelData(0);
+    const length = channelData.length;
+    const bytesPerSample = 2; // 16-bit
+    const dataSize = length * bytesPerSample;
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+
+    // WAV Header
+    const writeString = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+    };
+    writeString(0, 'RIFF');
+    view.setUint32(4, 36 + dataSize, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true); // chunk size
+    view.setUint16(20, 1, true); // PCM format
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+    view.setUint16(32, numChannels * bytesPerSample, true);
+    view.setUint16(34, bytesPerSample * 8, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    // Write PCM samples
+    let offset = 44;
+    for (let i = 0; i < length; i++) {
+      const sample = Math.max(-1, Math.min(1, channelData[i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += 2;
+    }
+
+    await audioContext.close();
+    return new Blob([buffer], { type: 'audio/wav' });
+  };
+
   const handleRecordingToggle = async () => {
     if (!isRecording) {
       try {
@@ -80,11 +126,11 @@ export default function Home() {
         };
 
         mediaRecorder.onstop = async () => {
-          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const webmBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
 
-          // Calculate elapsed time from start timestamp — immune to React lifecycle
+          // Calculate elapsed time from start timestamp
           const elapsed = Math.floor((Date.now() - recordingStartTimeRef.current) / 1000);
-          console.log('Recording stopped. Elapsed seconds:', elapsed);
+          console.log('Recording stopped. Elapsed seconds:', elapsed, 'Webm size:', webmBlob.size);
 
           if (elapsed < 10) {
             setStatus(`⚠️ Recording too short (${elapsed}s). Please record at least 30 seconds for best results.`);
@@ -94,13 +140,18 @@ export default function Home() {
           }
 
           setHasRecorded(true);
-          setStatus('Voice recorded! Cloning your voice...');
-
-          const formData = new FormData();
-          formData.append('audio', blob, 'voice.webm');
-          formData.append('name', 'My Eternal Voice');
+          setStatus('🔄 Converting audio & cloning your voice...');
 
           try {
+            // Convert webm to WAV for ElevenLabs compatibility
+            console.log('Converting webm to WAV...');
+            const wavBlob = await convertToWav(webmBlob);
+            console.log('WAV conversion done. Size:', wavBlob.size);
+
+            const formData = new FormData();
+            formData.append('audio', wavBlob, 'voice.wav');
+            formData.append('name', `EternalEcho-${Date.now()}`);
+
             const res = await fetch('/api/clone-voice', { method: 'POST', body: formData });
             const data = await res.json();
             console.log('Clone voice response:', data);
@@ -112,7 +163,7 @@ export default function Home() {
             }
           } catch (err) {
             console.error('Clone voice error:', err);
-            setStatus('⚠️ Connection error. Default voice will be used.');
+            setStatus('⚠️ Error during voice cloning. Default voice will be used.');
           }
           stream.getTracks().forEach(track => track.stop());
         };
@@ -124,8 +175,6 @@ export default function Home() {
         setStatus('❌ Microphone access denied.');
       }
     } else {
-      // IMPORTANT: stop() triggers onstop asynchronously
-      // Do NOT call setIsRecording(false) before stop finishes
       const recorder = mediaRecorderRef.current;
       if (recorder && recorder.state !== 'inactive') {
         recorder.stop();

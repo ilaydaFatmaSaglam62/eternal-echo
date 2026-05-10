@@ -15,22 +15,22 @@ export async function POST(request: NextRequest) {
         console.log('Audio file size:', audioFile.size, 'bytes');
         console.log('Audio file name:', audioFile.name);
 
-        // ElevenLabs Instant Voice Clone — /v1/voices/add
-        // Minimum ~10 saniyelik kayıt yeterli (boyut kontrolünü kaldırdık)
+        // ElevenLabs Instant Voice Clone (IVC)
+        // Endpoint: POST /v1/voices/add
+        // Requires: multipart/form-data with "files" field containing audio samples
+        const arrayBuffer = await audioFile.arrayBuffer();
+        const audioBlob = new Blob([arrayBuffer], { type: audioFile.type || 'audio/wav' });
+
         const elevenLabsFormData = new FormData();
         elevenLabsFormData.append('name', voiceName || `EternalEcho-${Date.now()}`);
-
-        // Orijinal ses verisini gönder
-        const arrayBuffer = await audioFile.arrayBuffer();
-        const originalType = audioFile.type || 'audio/webm';
-        const blob = new Blob([arrayBuffer], { type: originalType });
-
-        // ElevenLabs "files" parametresi ile Instant Voice Clone
-        elevenLabsFormData.append('files', blob, 'voice_sample.webm');
+        elevenLabsFormData.append('files', audioBlob, audioFile.name || 'voice.wav');
         elevenLabsFormData.append('description', 'EternalEcho instant voice clone');
 
+        // Optional: Add labels for better organization
+        elevenLabsFormData.append('labels', JSON.stringify({ app: 'EternalEcho' }));
+
         console.log('Sending to ElevenLabs /v1/voices/add...');
-        console.log('Blob size:', blob.size, 'type:', blob.type);
+        console.log('Blob type:', audioBlob.type, 'size:', audioBlob.size);
 
         const response = await fetch('https://api.elevenlabs.io/v1/voices/add', {
             method: 'POST',
@@ -48,9 +48,10 @@ export async function POST(request: NextRequest) {
         try {
             result = JSON.parse(responseText);
         } catch {
-            return NextResponse.json({ 
-                error: 'Invalid response from ElevenLabs', 
-                details: responseText 
+            console.error('Failed to parse ElevenLabs response as JSON');
+            return NextResponse.json({
+                error: 'Invalid response from ElevenLabs',
+                details: responseText
             }, { status: 500 });
         }
 
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
             if (response.status === 401) {
                 userMessage = 'API key is invalid or voice cloning is not available on your plan.';
             } else if (response.status === 422) {
-                userMessage = 'Audio could not be processed. Try recording clearer speech.';
+                userMessage = 'Audio could not be processed. Try recording clearer speech for at least 30 seconds.';
             } else if (result?.detail?.message) {
                 userMessage = result.detail.message;
             } else if (result?.detail) {
