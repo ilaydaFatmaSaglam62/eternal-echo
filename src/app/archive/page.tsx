@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FolderHeart, FolderLock, Folder, Plane, Volume2, Lock, Users, Brain } from "lucide-react";
+import { FolderHeart, FolderLock, Folder, Plane, Volume2, Lock, Users, Brain, Trash2 } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const CATEGORIES = [
   { name: "All", icon: Folder },
@@ -31,6 +32,8 @@ export default function ArchivePage() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [extraCategories, setExtraCategories] = useState<string[]>([]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMemories();
@@ -44,7 +47,6 @@ export default function ArchivePage() {
       if (data.memories) {
         setMemories(data.memories);
 
-        // Dinamik kategori tespiti: Mevcut CATEGORIES dışında olanları bul
         const knownCats = CATEGORIES.map(c => c.name.toLowerCase());
         const dynamicCats = [...new Set(
           data.memories
@@ -59,6 +61,43 @@ export default function ArchivePage() {
       setLoading(false);
     }
   };
+
+  const handleDelete = async (memory: Memory) => {
+    if (confirmDeleteId !== memory.ipfsHash) {
+      // İlk tıklama — onay iste
+      setConfirmDeleteId(memory.ipfsHash);
+      return;
+    }
+
+    // İkinci tıklama — sil
+    setDeletingId(memory.ipfsHash);
+    try {
+      const res = await fetch('/api/delete-memory', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ipfsHash: memory.ipfsHash }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMemories(prev => prev.filter(m => m.ipfsHash !== memory.ipfsHash));
+      } else {
+        console.error('Delete failed:', data.error);
+      }
+    } catch (err) {
+      console.error('Delete error:', err);
+    } finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    }
+  };
+
+  // Dışarıya tıklandığında onay iptal
+  useEffect(() => {
+    if (confirmDeleteId) {
+      const timer = setTimeout(() => setConfirmDeleteId(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [confirmDeleteId]);
 
   const allCategories = [
     ...CATEGORIES,
@@ -108,46 +147,82 @@ export default function ArchivePage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredMemories.map((memory) => (
-            <div key={memory.id} className="bg-white p-8 rounded-2xl border-subtle shadow-layered hover:shadow-[0_20px_60px_rgba(44,42,40,0.05)] transition-all duration-500 cursor-pointer flex flex-col gap-4 group relative overflow-hidden">
+          <AnimatePresence>
+            {filteredMemories.map((memory) => (
+              <motion.div
+                key={memory.ipfsHash || memory.id}
+                layout
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.3 } }}
+                className="bg-white p-8 rounded-2xl border-subtle shadow-layered hover:shadow-[0_20px_60px_rgba(44,42,40,0.05)] transition-all duration-500 cursor-pointer flex flex-col gap-4 group relative overflow-hidden"
+              >
+                {/* Delete Button */}
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleDelete(memory); }}
+                  disabled={deletingId === memory.ipfsHash}
+                  className={`absolute top-3 right-3 p-2 rounded-full transition-all duration-300 z-10 ${
+                    confirmDeleteId === memory.ipfsHash
+                      ? 'bg-red-500 text-white shadow-md scale-110'
+                      : 'bg-transparent text-[var(--text-muted)] opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-500'
+                  } ${deletingId === memory.ipfsHash ? 'animate-pulse' : ''}`}
+                  title={confirmDeleteId === memory.ipfsHash ? 'Click again to confirm delete' : 'Delete memory'}
+                >
+                  <Trash2 className="w-4 h-4" strokeWidth={1.5} />
+                </button>
 
-              {memory.imageUrl && !memory.imageUrl.includes('placehold') && (
-                <div className="w-full h-32 rounded-lg overflow-hidden border border-[var(--border-color)]">
-                  <img src={memory.imageUrl} alt="Memory" className="w-full h-full object-cover" />
-                </div>
-              )}
+                {/* Confirm text */}
+                <AnimatePresence>
+                  {confirmDeleteId === memory.ipfsHash && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      className="absolute top-12 right-3 bg-red-500 text-white text-[10px] font-medium px-2 py-1 rounded shadow-md z-10 whitespace-nowrap"
+                    >
+                      Click again to delete
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-              <div className="flex justify-between items-start">
-                <span className="font-inter uppercase tracking-widest text-[10px] font-medium text-[#D4AF37] bg-[#D4AF37]/10 px-2 py-0.5 rounded">
-                  {memory.category || 'Personal'}
-                </span>
-                <span className="font-playfair italic text-xs text-[var(--text-muted)]">
-                  {formatDate(memory.createdAt)}
-                </span>
-              </div>
-
-              <p className="font-playfair text-base text-[var(--foreground)] line-clamp-3 italic opacity-90">
-                &ldquo;{memory.text?.slice(0, 120)}...&rdquo;
-              </p>
-
-              {memory.isLocked ? (
-                <div className="flex items-center gap-2 text-[#D4AF37] text-xs">
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>Locked until {memory.unlockDate ? formatDate(memory.unlockDate) : '—'}</span>
-                </div>
-              ) : memory.audioUrl && (
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2 text-[var(--text-muted)] text-xs">
-                    <Volume2 className="w-3.5 h-3.5" />
-                    <span>Voice Memory</span>
+                {memory.imageUrl && !memory.imageUrl.includes('placehold') && (
+                  <div className="w-full h-32 rounded-lg overflow-hidden border border-[var(--border-color)]">
+                    <img src={memory.imageUrl} alt="Memory" className="w-full h-full object-cover" />
                   </div>
-                  <audio controls src={memory.audioUrl} className="w-full h-8" />
-                </div>
-              )}
+                )}
 
-              <div className="absolute inset-0 border-[0.5px] border-transparent group-hover:border-[#D4AF37]/20 rounded-2xl pointer-events-none transition-colors duration-500" />
-            </div>
-          ))}
+                <div className="flex justify-between items-start">
+                  <span className="font-inter uppercase tracking-widest text-[10px] font-medium text-[#D4AF37] bg-[#D4AF37]/10 px-2 py-0.5 rounded">
+                    {memory.category || 'Personal'}
+                  </span>
+                  <span className="font-playfair italic text-xs text-[var(--text-muted)]">
+                    {formatDate(memory.createdAt)}
+                  </span>
+                </div>
+
+                <p className="font-playfair text-base text-[var(--foreground)] line-clamp-3 italic opacity-90">
+                  &ldquo;{memory.text?.slice(0, 120)}...&rdquo;
+                </p>
+
+                {memory.isLocked ? (
+                  <div className="flex items-center gap-2 text-[#D4AF37] text-xs">
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Locked until {memory.unlockDate ? formatDate(memory.unlockDate) : '—'}</span>
+                  </div>
+                ) : memory.audioUrl && (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2 text-[var(--text-muted)] text-xs">
+                      <Volume2 className="w-3.5 h-3.5" />
+                      <span>Voice Memory</span>
+                    </div>
+                    <audio controls src={memory.audioUrl} className="w-full h-8" />
+                  </div>
+                )}
+
+                <div className="absolute inset-0 border-[0.5px] border-transparent group-hover:border-[#D4AF37]/20 rounded-2xl pointer-events-none transition-colors duration-500" />
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
     </main>

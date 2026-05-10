@@ -202,6 +202,10 @@ export default function Home() {
       });
       const sentimentData = await sentimentRes.json();
 
+      console.log('=== MINT: TTS CALL ===');
+      console.log('voiceId state:', voiceId);
+      console.log('Using voice:', voiceId || 'DEFAULT (no clone)');
+
       const ttsRes = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
