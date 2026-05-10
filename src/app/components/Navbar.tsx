@@ -2,23 +2,76 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Disc3, Wallet, Search, Plus, CheckCircle2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Disc3, Wallet, Search, Volume2, Lock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+
+interface FoundMemory {
+  id: string;
+  code?: string;
+  title: string;
+  text: string;
+  audioUrl: string;
+  imageUrl: string;
+  category: string;
+  unlockDate: string | null;
+  createdAt: string;
+  isLocked: boolean;
+  ipfsHash: string;
+}
 
 export default function Navbar() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearchActive, setIsSearchActive] = useState(false);
-  const [isAdded, setIsAdded] = useState(false);
+  const [foundMemory, setFoundMemory] = useState<FoundMemory | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+  const router = useRouter();
 
-  const isHashFormat = /^[A-Za-z0-9]{6}$/.test(searchQuery.trim());
+  const isCodeFormat = /^[A-Za-z0-9]{4}$/.test(searchQuery.trim());
 
-  const handleAdd = () => {
-    setIsAdded(true);
-    setTimeout(() => {
-      setIsSearchActive(false);
-      setSearchQuery("");
-      setIsAdded(false);
-    }, 2000);
+  const handleSearch = async () => {
+    if (!isCodeFormat) return;
+    setSearching(true);
+    setNotFound(false);
+    setFoundMemory(null);
+
+    try {
+      const res = await fetch('/api/get-memories');
+      const data = await res.json();
+      if (data.memories) {
+        const code = searchQuery.trim().toUpperCase();
+        // Kod ile eşleşen memory'yi bul
+        const match = data.memories.find((m: FoundMemory) => {
+          if (m.code && m.code.toUpperCase() === code) return true;
+          // Eski kayıtlar için ipfsHash'den türetilmiş kodu kontrol et
+          const fallbackCode = (m.ipfsHash || m.id).slice(-4).toUpperCase();
+          return fallbackCode === code;
+        });
+        if (match) {
+          setFoundMemory(match);
+        } else {
+          setNotFound(true);
+        }
+      }
+    } catch (err) {
+      console.error('Search error:', err);
+      setNotFound(true);
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && isCodeFormat) {
+      handleSearch();
+    }
+  };
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('en-US', {
+      day: 'numeric', month: 'long', year: 'numeric'
+    });
   };
 
   return (
@@ -44,47 +97,85 @@ export default function Navbar() {
             <Search className={`w-3.5 h-3.5 ${isSearchActive ? 'text-[#D4AF37]' : 'text-[var(--text-muted)]'}`} />
             <input
               type="text"
-              placeholder="Enter 6-digit code..."
+              placeholder="Enter 4-digit code..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value.toUpperCase())}
+              onChange={(e) => { setSearchQuery(e.target.value.toUpperCase()); setNotFound(false); setFoundMemory(null); }}
               onFocus={() => setIsSearchActive(true)}
               onBlur={() => { if (!searchQuery) setIsSearchActive(false); }}
-              className="bg-transparent outline-none text-xs w-48 placeholder:text-[var(--text-muted)] text-[var(--foreground)] tracking-widest font-medium"
-              maxLength={6}
+              onKeyDown={handleKeyDown}
+              className="bg-transparent outline-none text-xs w-44 placeholder:text-[var(--text-muted)] text-[var(--foreground)] tracking-widest font-mono font-medium"
+              maxLength={4}
             />
+            {isCodeFormat && (
+              <button
+                onClick={handleSearch}
+                disabled={searching}
+                className="text-[9px] uppercase tracking-widest font-semibold text-[#D4AF37] hover:text-[var(--foreground)] transition-colors"
+              >
+                {searching ? '...' : 'Go'}
+              </button>
+            )}
           </div>
 
           <AnimatePresence>
-            {isSearchActive && isHashFormat && (
+            {/* Found Memory */}
+            {foundMemory && (
               <motion.div
                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="absolute top-10 right-0 w-64 bg-white shadow-layered border-subtle rounded-xl p-4 flex flex-col gap-4 z-50 origin-top-right"
+                className="absolute top-10 right-0 w-80 bg-white shadow-2xl border-subtle rounded-2xl p-5 flex flex-col gap-4 z-50 origin-top-right"
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex flex-col gap-1">
-                    <span className="text-[10px] uppercase tracking-widest text-[#D4AF37] font-semibold bg-[#D4AF37]/10 px-2 py-0.5 rounded w-fit">
-                      Shared with me
-                    </span>
-                    <span className="font-playfair font-medium text-[var(--foreground)]">Memory Found</span>
-                    <span className="text-xs font-inter text-[var(--text-muted)] tracking-wide">ID: {searchQuery}</span>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-mono font-bold text-sm tracking-widest bg-[var(--foreground)] text-[var(--background)] px-2.5 py-1 rounded">
+                    #{searchQuery}
+                  </span>
+                  <span className="font-inter uppercase tracking-widest text-[9px] font-medium text-[#D4AF37] bg-[#D4AF37]/10 px-2 py-0.5 rounded">
+                    {foundMemory.category || 'Personal'}
+                  </span>
                 </div>
+
+                <p className="font-playfair text-sm italic text-[var(--foreground)] leading-relaxed line-clamp-4">
+                  &ldquo;{foundMemory.text?.slice(0, 200)}{foundMemory.text?.length > 200 ? '...' : ''}&rdquo;
+                </p>
+
+                <div className="flex items-center justify-between text-[10px] text-[var(--text-muted)]">
+                  <span className="font-playfair italic">{formatDate(foundMemory.createdAt)}</span>
+                  {foundMemory.isLocked ? (
+                    <span className="flex items-center gap-1 text-[#D4AF37]"><Lock className="w-3 h-3" /> Locked</span>
+                  ) : foundMemory.audioUrl ? (
+                    <span className="flex items-center gap-1"><Volume2 className="w-3 h-3" /> Has Audio</span>
+                  ) : null}
+                </div>
+
+                {!foundMemory.isLocked && foundMemory.audioUrl && (
+                  <audio controls src={foundMemory.audioUrl} className="w-full h-8" />
+                )}
+
                 <button
-                  onClick={handleAdd}
-                  disabled={isAdded}
-                  className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg transition-all duration-300 text-xs font-medium tracking-wide border ${isAdded
-                    ? 'bg-green-50 text-green-600 border-green-200'
-                    : 'bg-[var(--foreground)] text-[var(--background)] border-transparent hover:bg-black'
-                    }`}
+                  onClick={() => {
+                    router.push('/archive');
+                    setSearchQuery('');
+                    setFoundMemory(null);
+                    setIsSearchActive(false);
+                  }}
+                  className="w-full py-2.5 rounded-xl bg-[var(--foreground)] text-[var(--background)] text-xs font-medium tracking-widest uppercase hover:bg-black transition-colors"
                 >
-                  {isAdded ? (
-                    <><CheckCircle2 className="w-4 h-4" /> Added to Archive</>
-                  ) : (
-                    <><Plus className="w-4 h-4" /> Add to My Archive</>
-                  )}
+                  View in Archive →
                 </button>
+              </motion.div>
+            )}
+
+            {/* Not Found */}
+            {notFound && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute top-10 right-0 w-64 bg-white shadow-layered border-subtle rounded-xl p-4 z-50 text-center"
+              >
+                <p className="font-playfair text-sm text-[var(--text-muted)] italic">No memory found with code</p>
+                <p className="font-mono font-bold tracking-widest text-[var(--foreground)] mt-1">#{searchQuery}</p>
               </motion.div>
             )}
           </AnimatePresence>

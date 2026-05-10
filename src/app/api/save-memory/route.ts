@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// 4 haneli benzersiz alfanumerik kod üret
+function generateCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // karışıklık yaratabilecek 0/O, 1/I/L kaldırıldı
+    let code = '';
+    for (let i = 0; i < 4; i++) {
+        code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return code;
+}
+
 export async function POST(request: NextRequest) {
     try {
         const { title, text, audioUrl, imageUrl, unlockDate, category, walletAddress } = await request.json();
 
+        const memoryCode = generateCode();
+
         const memory = {
             id: Date.now().toString(),
+            code: memoryCode,
             title: title || 'Untitled Memory',
             text,
             audioUrl,
@@ -32,6 +45,7 @@ export async function POST(request: NextRequest) {
                         walletAddress: walletAddress || 'anonymous',
                         category: memory.category,
                         unlockDate: memory.unlockDate || 'none',
+                        code: memoryCode,
                     },
                 },
             }),
@@ -46,6 +60,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
             success: true,
             memory,
+            code: memoryCode,
             ipfsHash: result.IpfsHash,
             ipfsUrl: `https://gateway.pinata.cloud/ipfs/${result.IpfsHash}`,
         });

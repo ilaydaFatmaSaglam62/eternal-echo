@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { FolderHeart, FolderLock, Folder, Plane, Volume2, Lock, Users, Brain, Trash2 } from "lucide-react";
+import { FolderHeart, FolderLock, Folder, Plane, Volume2, Lock, Users, Brain, Trash2, X, Copy, Check } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const CATEGORIES = [
@@ -15,6 +15,7 @@ const CATEGORIES = [
 
 interface Memory {
   id: string;
+  code?: string;
   title: string;
   text: string;
   audioUrl: string;
@@ -30,10 +31,11 @@ export default function ArchivePage() {
   const [memories, setMemories] = useState<Memory[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState("All");
-  const [playingId, setPlayingId] = useState<string | null>(null);
   const [extraCategories, setExtraCategories] = useState<string[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   useEffect(() => {
     fetchMemories();
@@ -64,12 +66,10 @@ export default function ArchivePage() {
 
   const handleDelete = async (memory: Memory) => {
     if (confirmDeleteId !== memory.ipfsHash) {
-      // İlk tıklama — onay iste
       setConfirmDeleteId(memory.ipfsHash);
       return;
     }
 
-    // İkinci tıklama — sil
     setDeletingId(memory.ipfsHash);
     try {
       const res = await fetch('/api/delete-memory', {
@@ -80,6 +80,7 @@ export default function ArchivePage() {
       const data = await res.json();
       if (data.success) {
         setMemories(prev => prev.filter(m => m.ipfsHash !== memory.ipfsHash));
+        if (selectedMemory?.ipfsHash === memory.ipfsHash) setSelectedMemory(null);
       } else {
         console.error('Delete failed:', data.error);
       }
@@ -91,13 +92,26 @@ export default function ArchivePage() {
     }
   };
 
-  // Dışarıya tıklandığında onay iptal
   useEffect(() => {
     if (confirmDeleteId) {
       const timer = setTimeout(() => setConfirmDeleteId(null), 4000);
       return () => clearTimeout(timer);
     }
   }, [confirmDeleteId]);
+
+  const handleCopyCode = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
+  // 4 haneli kod üretici (eski kayıtlar için)
+  const getMemoryCode = (memory: Memory): string => {
+    if (memory.code) return memory.code;
+    // Eski kayıtlar için ipfsHash'den türet
+    const hash = memory.ipfsHash || memory.id;
+    return hash.slice(-4).toUpperCase();
+  };
 
   const allCategories = [
     ...CATEGORIES,
@@ -155,6 +169,7 @@ export default function ArchivePage() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.3 } }}
+                onDoubleClick={() => setSelectedMemory(memory)}
                 className="bg-white p-8 rounded-2xl border-subtle shadow-layered hover:shadow-[0_20px_60px_rgba(44,42,40,0.05)] transition-all duration-500 cursor-pointer flex flex-col gap-4 group relative overflow-hidden"
               >
                 {/* Delete Button */}
@@ -184,6 +199,13 @@ export default function ArchivePage() {
                     </motion.div>
                   )}
                 </AnimatePresence>
+
+                {/* Memory Code Badge */}
+                <div className="absolute top-3 left-3 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <span className="text-[9px] font-mono font-bold tracking-widest bg-[var(--foreground)] text-[var(--background)] px-2 py-1 rounded">
+                    #{getMemoryCode(memory)}
+                  </span>
+                </div>
 
                 {memory.imageUrl && !memory.imageUrl.includes('placehold') && (
                   <div className="w-full h-32 rounded-lg overflow-hidden border border-[var(--border-color)]">
@@ -219,12 +241,113 @@ export default function ArchivePage() {
                   </div>
                 )}
 
+                {/* Double click hint */}
+                <div className="text-[9px] text-[var(--text-muted)] text-center opacity-0 group-hover:opacity-60 transition-opacity">
+                  Double-click to expand
+                </div>
+
                 <div className="absolute inset-0 border-[0.5px] border-transparent group-hover:border-[#D4AF37]/20 rounded-2xl pointer-events-none transition-colors duration-500" />
               </motion.div>
             ))}
           </AnimatePresence>
         </div>
       )}
+
+      {/* ========== EXPANDED MEMORY MODAL ========== */}
+      <AnimatePresence>
+        {selectedMemory && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
+            onClick={() => setSelectedMemory(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 30 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+              className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto p-8 sm:p-10 relative"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close button */}
+              <button
+                onClick={() => setSelectedMemory(null)}
+                className="absolute top-4 right-4 p-2 rounded-full hover:bg-[var(--accent)] transition-colors text-[var(--text-muted)] hover:text-[var(--foreground)]"
+              >
+                <X className="w-5 h-5" strokeWidth={1.5} />
+              </button>
+
+              {/* Code badge */}
+              <div className="flex items-center gap-3 mb-6">
+                <span className="font-mono font-bold text-sm tracking-widest bg-[var(--foreground)] text-[var(--background)] px-3 py-1.5 rounded-lg">
+                  #{getMemoryCode(selectedMemory)}
+                </span>
+                <button
+                  onClick={() => handleCopyCode(getMemoryCode(selectedMemory))}
+                  className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-[var(--text-muted)] hover:text-[#D4AF37] transition-colors"
+                >
+                  {copiedCode ? (
+                    <><Check className="w-3 h-3 text-green-500" /> Copied!</>
+                  ) : (
+                    <><Copy className="w-3 h-3" /> Copy Code</>
+                  )}
+                </button>
+              </div>
+
+              {/* Category & Date */}
+              <div className="flex items-center justify-between mb-6">
+                <span className="font-inter uppercase tracking-widest text-[11px] font-medium text-[#D4AF37] bg-[#D4AF37]/10 px-3 py-1 rounded-full">
+                  {selectedMemory.category || 'Personal'}
+                </span>
+                <span className="font-playfair italic text-sm text-[var(--text-muted)]">
+                  {formatDate(selectedMemory.createdAt)}
+                </span>
+              </div>
+
+              {/* Image */}
+              {selectedMemory.imageUrl && !selectedMemory.imageUrl.includes('placehold') && (
+                <div className="w-full h-64 rounded-2xl overflow-hidden border border-[var(--border-color)] mb-8">
+                  <img src={selectedMemory.imageUrl} alt="Memory" className="w-full h-full object-cover" />
+                </div>
+              )}
+
+              {/* Full Text */}
+              <div className="mb-8">
+                <p className="font-playfair text-xl leading-relaxed text-[var(--foreground)] italic">
+                  &ldquo;{selectedMemory.text}&rdquo;
+                </p>
+              </div>
+
+              {/* Audio Player */}
+              {selectedMemory.isLocked ? (
+                <div className="flex items-center gap-3 text-[#D4AF37] text-sm bg-[#D4AF37]/5 p-4 rounded-xl">
+                  <Lock className="w-5 h-5" />
+                  <span className="font-playfair italic">
+                    Locked until {selectedMemory.unlockDate ? formatDate(selectedMemory.unlockDate) : '—'}
+                  </span>
+                </div>
+              ) : selectedMemory.audioUrl && (
+                <div className="bg-[var(--accent)] p-4 rounded-xl">
+                  <div className="flex items-center gap-2 text-[var(--text-muted)] text-xs mb-3">
+                    <Volume2 className="w-4 h-4" />
+                    <span className="font-medium uppercase tracking-widest text-[10px]">Voice Memory</span>
+                  </div>
+                  <audio controls src={selectedMemory.audioUrl} className="w-full" />
+                </div>
+              )}
+
+              {/* IPFS info */}
+              <div className="mt-6 pt-4 border-t border-[var(--border-color)]">
+                <p className="text-[10px] text-[var(--text-muted)] font-mono tracking-wide truncate">
+                  IPFS: {selectedMemory.ipfsHash}
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
